@@ -25,6 +25,11 @@ def rand_ket(d):
     ket = np.random.randn(d) + 1j*np.random.randn(d)
     return ket/np.linalg.norm(ket)
 
+def rand_kets(d, n):
+    R = np.random.randn(d, n) + 1j*np.random.randn(d, n)
+    R = R/np.linalg.norm(R, axis=0)
+    return R.T
+
 def rand_dm(d, r=1):
     A = np.random.randn(d,r) + 1j*np.random.randn(d,r)
     A = A @ A.conj().T
@@ -33,6 +38,12 @@ def rand_dm(d, r=1):
 def rand_herm(d):
     A = np.random.randn(d,d) + 1j*np.random.randn(d,d)
     return A + A.conj().T
+
+def rand_unitary(d):
+    return sc.stats.unitary_group.rvs(d)
+
+def rand_basis(n, d):
+    return rand_unitary(d)[:n, :]
 
 def kron(*A):
     return reduce(np.kron, A)
@@ -338,13 +349,31 @@ def prime_mubs(d, kets=False):
 
 ####################################################################################################
 
-@jax.jit
-def jit_linear_stabilizer_entropy(ket, D):
-    d = ket.shape[0]
-    chi = jp.array([abs(ket.conj() @ O @ ket)**2 for O in D])/d
-    return 1 - d*jp.sum(chi**2)
+def avg_magic(D, exact=False, M=750, R=10):
+    d = D[0].shape[0]
+    if exact:
+        return ((1 - d*(construct_Q(D) @ haar_moment(d, 4)).trace()).real, 0)
+    else:
+        samples = []
+        for r in range(R):
+            K = rand_kets(d, M)
+            samples.append(np.mean(1-np.sum(abs(np.einsum('id,jde,ie->ij', K.conj(), D, K))**4, axis=1)/d))
+        return (np.mean(samples), np.std(samples))
 
-def magic_gap(D_big, D_small, B, big_exact=True, small_exact=True, M=5000, R=10):
+def avg_magic_subspace(D, B, exact=False, M=750, R=5):
+    d_big = D[0].shape[0]
+    d_small = B.shape[0]
+    if exact:
+        B4 = tensor_power(B, 4)
+        return ((1 - d_big*(construct_Q(D) @ B4.conj().T @ haar_moment(d_small, 4) @ B4).trace().real), 0)
+    else:
+        samples = []
+        for r in range(R):
+            K = rand_kets(d_small, M) @ B
+            samples.append(np.mean(1-np.sum(abs(np.einsum('id,jde,ie->ij', K.conj(), D, K))**4, axis=1)/d_big))
+        return (np.mean(samples), np.std(samples))
+
+def magic_gap(D_big, D_small, B, big_exact=True, small_exact=True, M=750, R=5):
     d_small = D_small[0].shape[0]
     d_big = D_big[0].shape[0]
 
@@ -353,25 +382,8 @@ def magic_gap(D_big, D_small, B, big_exact=True, small_exact=True, M=5000, R=10)
     if d_big > 5:
         big_exact = False
 
-    if small_exact or big_exact:
-        M4 = haar_moment(d_small, 4)
-
-    if small_exact:
-        avg_small_magic = (1 - d_small*(construct_Q(D_small) @ M4).trace()).real
-        avg_small_magic_std = 0
-    else:
-        samples = np.array([np.mean([jit_linear_stabilizer_entropy(rand_ket(d_small), D_small) for i in range(M)]) for r in range(R)])
-        avg_small_magic = np.mean(samples)
-        avg_small_magic_std = np.std(samples)
-
-    if big_exact:
-        B4 = tensor_power(B, 4)
-        avg_big_magic = (1 - d_big*(construct_Q(D_big) @ B4.conj().T @ M4 @ B4).trace()).real
-        avg_big_magic_std = 0
-    else:
-        samples = np.array([np.mean([jit_linear_stabilizer_entropy(B.conj().T @ rand_ket(d_small), D_big) for i in range(M)]) for r in range(R)])
-        avg_big_magic = np.mean(samples)
-        avg_big_magic_std = np.std(samples)
+    avg_small_magic, avg_small_magic_std = avg_magic(D_small, exact=small_exact, M=M, R=R)
+    avg_big_magic, avg_big_magic_std = avg_magic_subspace(D_big, B, exact=big_exact, M=M, R=R)
 
     avg_magic_gap = avg_big_magic - avg_small_magic
     avg_magic_gap_std = np.sqrt(avg_big_magic_std**2 + avg_small_magic_std**2)
@@ -380,3 +392,83 @@ def magic_gap(D_big, D_small, B, big_exact=True, small_exact=True, M=5000, R=10)
             "avg_small_magic": avg_small_magic, "avg_small_magic_std": avg_small_magic_std,\
             "avg_big_magic": avg_big_magic, "avg_big_magic_std": avg_big_magic_std,\
             "big_exact": big_exact, "small_exact": small_exact, "M": M, "R": R, "B": B, "D_small": D_small, "D_big": D_big}
+
+def avg_magic_gap(D_big, D_small, M=5000, R=5000):
+    d_small = D_small[0].shape[0]
+    d_big = D_big[0].shape[0]
+
+    avg_small_magic = np.mean([jit_linear_stabilizer_entropy(rand_ket(d_small), D_small) for i in range(M)])
+
+    samples = []
+    for i in range(R): 
+        B = rand_basis(d_small, d_big)
+        samples.append([np.mean([jit_linear_stabilizer_entropy(B.conj().T @ rand_ket(d_small), D_big) for j in range(M)])])
+    avg_big_magic = np.mean(samples)
+    avg_big_magic_std = np.std(samples)
+
+    avg_magic_gap = avg_big_magic - avg_small_magic
+    return {"d_small": d_small, "d_big": d_big, "avg_magic_gap": avg_magic_gap, 
+            "avg_small_magic": avg_small_magic, 
+            "avg_big_magic": avg_big_magic, "avg_big_magic_std": avg_big_magic_std,\
+            "M": M, "R": R, "D_small": D_small, "D_big": D_big}
+
+def extremize_subspace_magic(D, d_small, dir, exact=False, R=1, S=10, M=750):
+    if exact:
+        return extremize_subspace_magic_exact(D, d_small, dir, R=R)
+    else:
+        return extremize_subspace_magic_approx(D, d_small, dir, R=R, S=S, M=M)
+
+def extremize_subspace_magic_exact(D, d_small, dir, R=1):
+    d_big = D[0].shape[0]
+    Q_big = construct_Q(D)
+    M4_small = haar_moment(d_small, 4)
+    s = 1 if dir == "min" else -1
+
+    @jax.jit
+    def obj(V):
+        V = V.reshape(2, d_small, d_big)
+        C = V[0] + 1j*V[1]
+        C = jp.linalg.qr(C.conj().T)[0].conj().T
+        C4 = jp.kron(C, jp.kron(C, jp.kron(C, C)))
+        avg_magic_big = (1 - d_big*(Q_big @ C4.conj().T @ M4_small @ C4).trace()).real 
+        return s*avg_magic_big**2
+
+    results = [sc.optimize.minimize(obj, np.random.randn(2*d_big*d_small),\
+                                         jac=jax.jit(jax.jacrev(obj)),\
+                                         tol=1e-26, options={"disp": False, "maxiter": 10000})
+                    for r in range(R)]
+    if dir == "min":
+        result = results[np.argmin([r.fun for r in results])]
+    elif dir == "max":
+        result = results[np.argmax([r.fun for r in results])]
+    V = result.x.reshape(2, d_small, d_big)
+    C =  V[0] + 1j*V[1]
+    return (jp.linalg.qr(C.conj().T)[0].conj().T, result)
+
+def extremize_subspace_magic_approx(D, d_small, dir, R=1, S=10, M=750):
+    d_big = D[0].shape[0]
+    s = 1 if dir == "min" else -1
+    Ks = [rand_kets(d_small, M) for _ in range(S)]
+    
+    @jax.jit
+    def obj(V):
+        V = V.reshape(2, d_small, d_big)
+        C = V[0] + 1j*V[1]
+        C = jp.linalg.qr(C.conj().T)[0].conj().T
+        samples = []
+        for K in Ks:
+            L = K @ C
+            samples.append(jp.mean(1-jp.sum(abs(jp.einsum('id,jde,ie->ij', L.conj(), D, L))**4, axis=1)/d_big))
+        return s*jp.mean(jp.array(samples))**2
+
+    results = [sc.optimize.minimize(obj, np.random.randn(2*d_big*d_small),\
+                                         jac=jax.jit(jax.jacrev(obj)),\
+                                         tol=1e-26, options={"disp": False, "maxiter": 10000})
+                    for r in range(R)]
+    if dir == "min":
+        result = results[np.argmin([r.fun for r in results])]
+    elif dir == "max":
+        result = results[np.argmax([r.fun for r in results])]
+    V = result.x.reshape(2, d_small, d_big)
+    C =  V[0] + 1j*V[1]
+    return (jp.linalg.qr(C.conj().T)[0].conj().T, result)
