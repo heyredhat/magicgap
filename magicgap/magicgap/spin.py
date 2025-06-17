@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sc
 from itertools import product, permutations
 
-from .utils import bv
+from .utils import bv, rand_ket, kron
 
 def d_j(d):
     return (d-1)/2
@@ -96,13 +96,17 @@ def recoupled_spin_basis(*j_values):
         sectors = new_sectors
     return sectors
 
+
+def recoupled_spin_sectors(*j_values):
+    return [(float(k), len(v)) for k,v in recoupled_spin_basis(*j_values).items()]
+
 ####################################################################################################
 
 def plane_sphere(z):
     if z == np.inf:
         return np.array([0,0,-1])
     else:
-        return np.array([2*z.real, 2*z.imag, 1-z.real**2 - z.imag**2])/(1+z.real**2+z.imag**2)
+        return np.array([2*z.real, 2*z.imag, 1-z.real**2-z.imag**2])/(1+z.real**2+z.imag**2)
     
 def sphere_plane(xyz):
     x, y, z = xyz
@@ -115,7 +119,7 @@ def majorana_polynomial(ket):
     return np.polynomial.Polynomial(\
                     [(-1)**(j-m)*\
                      np.sqrt(sc.special.binom(2*j, j-m))*\
-                     spin_basis_vector(j, m).conj() @ ket\
+                     spin_bv(j, m).conj() @ ket\
                          for m in np.arange(-j, j+1)])
 
 def majorana_roots(ket):
@@ -139,3 +143,16 @@ def sym_qubit_basis(j):
             sym_qubit_states[total] = []
         sym_qubit_states[total].append(bv("".join([str(_) for _ in idx]), d=2))
     return np.array([sum(sym_qubit_states[i])/np.sqrt(len(sym_qubit_states[i])) for i in range(int(2*j+1))])
+
+def perm_sym_product(kets):
+    psi = sum([kron(*kets[perm, :]) for perm in permutations(list(range(len(kets))))])
+    return psi/np.linalg.norm(psi)
+
+def test_sym_qubits(j):
+    d = j_d(j)
+    B = sym_qubit_basis(j)
+    ket = rand_ket(d)
+    sym_qubits = B.conj().T @ ket
+    sep_qubits = stars_qubits(majorana_stars(ket))
+    sym_qubits2 = perm_sym_product(sep_qubits)
+    return np.allclose(sym_qubits/sym_qubits[0], sym_qubits2/sym_qubits2[0])

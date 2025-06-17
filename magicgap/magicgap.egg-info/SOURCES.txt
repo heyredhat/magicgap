@@ -1,0 +1,17 @@
+pyproject.toml
+setup.py
+magicgap/__init__.py
+magicgap/clifford.py
+magicgap/polyhedra.py
+magicgap/polyhedrec.py
+magicgap/spin.py
+magicgap/stabilizer_entropy.py
+magicgap/utils.py
+magicgap.egg-info/PKG-INFO
+magicgap.egg-info/SOURCES.txt
+magicgap.egg-info/dependency_links.txt
+magicgap.egg-info/requires.txt
+magicgap.egg-info/top_level.txt
+magicgap/old/avg_magic_gap.py
+magicgap/old/extremal_qubit_magic.py
+magicgap/old/extremal_qudit_magic.py

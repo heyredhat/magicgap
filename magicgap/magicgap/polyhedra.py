@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 
-from .spin import recoupled_spin_basis, spin_matrices
+from .utils import upgrade
+from .spin import recoupled_spin_basis, spin_matrices, j_d
 from .polyhedrec import *
 
 def intertwiner_basis(*j_values):
