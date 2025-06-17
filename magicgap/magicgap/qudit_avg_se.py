@@ -8,6 +8,8 @@ from jax import config
 config.update("jax_enable_x64", True)
 config.update("jax_platform_name", "cpu")
 
+from .stabilizer_entropy import expand_chi
+
 @partial(jax.jit, static_argnums=(1,))
 def qudit_term1(chi_abs2, d):
     return 3 * d ** 2 * jp.sum(chi_abs2 ** 2)
@@ -101,8 +103,8 @@ def avg_magic_subspace_qudit(D, O, projector=False, return_terms=False):
         Pi = O.conj().T @ O
         d_s = O.shape[0]
 
-    chi = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), Pi) / d
-    chi_trunc = chi[:d, :d]
+    chi_trunc = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), Pi) / d
+    chi = expand_chi(chi_trunc)
     chi_abs2 = jp.abs(chi_trunc) ** 2
 
     term1 = qudit_term1(chi_abs2, d)
@@ -129,8 +131,8 @@ def extremize_subspace_magic_qudit(D, d_s, dir, R=1):
         B = V[0] + 1j*V[1]
         B = jp.linalg.qr(B.conj().T)[0].conj().T
         Pi = B.conj().T @ B
-        chi = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), B.conj().T @ B) / d
-        chi_trunc = chi[:d, :d]
+        chi_trunc = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), B.conj().T @ B) / d
+        chi = expand_chi(chi_trunc)
         chi_abs2 = jp.abs(chi_trunc) ** 2
         term1 = qudit_term1(chi_abs2, d)
         term2 = qudit_term2(chi_abs2, d)

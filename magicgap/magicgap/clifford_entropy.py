@@ -10,19 +10,23 @@ config.update("jax_platform_name", "cpu")
 from .utils import rand_unitary
 
 def clifford_entropy(D, U, alpha=2):
+    D = flatten_if_needed(D)
     d = D[0].shape[0]
     return (1 - sum([abs((a.conj().T @ U @ b @ U.conj().T).trace())**(2*alpha) for b in D for a in D])/d**(2*(alpha+1)))/(alpha-1)
 
 def clifford_entropy_vec(D, U_batch):
+    D = flatten_if_needed(D)
     d = D.shape[-1]
     return 1 - np.sum(abs(np.einsum("axy, ixz, bzq, iyq->iab", D.conj(), U_batch, D, U_batch.conj()))**4, axis=(1,2))/d**6
 
 def avg_clifford_entropy_mc(D, M=750):
+    D = flatten_if_needed(D)
     d = D.shape[-1]
     samples = clifford_entropy_vec(D, rand_unitary(d, M))
     return np.mean(samples), np.std(samples)
 
 def avg_clifford_entropy_subspace_mc(D, B, M=750):
+    D = flatten_if_needed(D)
     d_s, d_b = B.shape
     Pi_C = np.eye(d_b) - B.conj().T @ B
     samples = clifford_entropy_vec(D, B.conj().T @ rand_unitary(d_s, M) @ B + Pi_C)
@@ -34,11 +38,16 @@ def lift_unitary(U, B):
     return B.conj().T @ U @ B + Pi_C 
 
 def wh_entropy(D_b, D_s, B):
+    D_b = flatten_if_needed(D_b)
+    D_s = flatten_if_need(D_s)
     d_s, d_b = B.shape
     chi = np.array([[(a.conj().T @ lift_unitary(b, B)).trace() for b in D_s] for a in D_b])
     return 1 - np.sum(abs(chi)**4)/d_b**6
 
 def extremize_wh_entropy(D_b, D_s, dir, R=1):
+    D_b = flatten_if_needed(D_b)
+    D_s = flatten_if_need(D_s)
+
     s = 1 if dir == "min" else -1
     d_b = D_b.shape[-1]
     d_s = D_s.shape[-1]
@@ -66,6 +75,7 @@ def extremize_wh_entropy(D_b, D_s, dir, R=1):
     return np.array(jp.linalg.qr(B.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
 
 def min_unitary_completion(D, B, R=10):
+    D = flatten_if_needed(D)
     d_s, d_b = B.shape
     d_c = d_b - d_s
     @jax.jit

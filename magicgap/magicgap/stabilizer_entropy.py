@@ -11,7 +11,7 @@ config.update("jax_platform_name", "cpu")
 
 from .utils import kron, rand_kets, rand_basis, haar_moment, tensor_power
 
-def qudit_wh_operators(d, matrix=False, expanded=False):
+def qudit_wh_operators(d, matrix=True, expanded=False):
     d_bar = d if d % 2 != 0 else 2 * d
     w = np.exp(2 * np.pi * 1j / d)
     tau = -np.exp(1j * np.pi / d)
@@ -22,7 +22,7 @@ def qudit_wh_operators(d, matrix=False, expanded=False):
     D = np.array([[tau ** (q * p) * np.linalg.matrix_power(X, q) @ np.linalg.matrix_power(Z, p) for p in range(up_to)] for q in range(up_to)])
     return D if matrix else D.reshape(up_to * up_to, d, d)
 
-def wh_operators(*dims, matrix=False, expanded=False):
+def wh_operators(*dims, matrix=True, expanded=False):
     import itertools
     tensors = [qudit_wh_operators(d, matrix=True, expanded=expanded) for d in dims]
     sym_dims = [(d if d % 2 != 0 else 2 * d) if expanded else d for d in dims for _ in range(2)]
@@ -35,6 +35,9 @@ def wh_operators(*dims, matrix=False, expanded=False):
         D[idx] = kron_factor
     return D if matrix else D.reshape(-1, total_d, total_d)
 
+def flatten_if_needed(D):
+    return D if D.ndim == 3 else D.reshape(-1, D.shape[-1], D.shape[-1])
+
 @jax.jit
 def sum_symp_indices(ind, d_bar):
     return tuple(jp.sum(jp.stack(jp.asarray(ind)), axis=0) % d_bar)
@@ -45,7 +48,30 @@ def symplectic_product(a, b):
     b_reshaped = jp.asarray(b).reshape((-1, 2))
     return jp.sum(a_reshaped[:, 1] * b_reshaped[:, 0] - a_reshaped[:, 0] * b_reshaped[:, 1])
 
+def chi_func_scalar(chi_base, d, c):
+    c = jp.asarray(c)
+    a = c % d
+    b = (c - a) / d
+    return jax.lax.cond(
+        d % 2 != 0,
+        lambda: chi_base[tuple(a)],
+        lambda: (-1.0)**symplectic_product(a, b) * chi_base[tuple(a)],
+    )
+
+@jax.jit
+def expand_chi(base):
+    d = base.shape[0]
+    n = base.ndim // 2
+    d_bar = d if d % 2 != 0 else 2 * d
+    c_ranges = [jp.arange(d_bar)] * (2 * n)
+    c_grid = jp.stack(jp.meshgrid(*c_ranges, indexing='ij'), axis=-1).reshape(-1, 2 * n)
+    vectorized_chi_func = jax.vmap(lambda c: chi_func_scalar(base, d, c), in_axes=0)
+    chi_flat = vectorized_chi_func(c_grid)
+    target_shape = [d_bar, d_bar] * n
+    return chi_flat.reshape(target_shape)
+
 def construct_Q(D):
+    D = flatten_if_needed(D)
     d = D.shape[-1]
     Q = sum([kron(O, O.conj().T, O, O.conj().T) for O in D])/d**2
     return Q
@@ -53,6 +79,7 @@ def construct_Q(D):
 ####################################################################################################
 
 def renyi_stabilizer_entropy(D, ket, alpha):
+    D = flatten_if_needed(D)
     d = ket.shape[0]
     chi = np.array([abs(ket.conj() @ O @ ket)**2 for O in D])/d
     return (1/(1-alpha))*np.log2(np.sum(chi**(2*alpha))) - np.log2(d)
@@ -61,6 +88,7 @@ def max_renyi_stabilizer_entropy(d, alpha=2):
     return (1/(1-alpha))*np.log2((1+(d-1)*(d+1)**(1-alpha))/d)
 
 def linear_stabilizer_entropy(D, ket):
+    D = flatten_if_needed(D)
     d = ket.shape[0]
     chi = np.array([abs(ket.conj() @ O @ ket)**2 for O in D])/d
     return 1 - d*sum(chi**2)
@@ -68,10 +96,12 @@ def linear_stabilizer_entropy(D, ket):
 ####################################################################################################
 
 def avg_magic_exact(D):
+    D = flatten_if_needed(D)
     d = D[0].shape[0]
     return (1 - d*(construct_Q(D) @ haar_moment(d, 4)).trace()).real
 
 def avg_magic_mc(D, M=750):
+    D = flatten_if_needed(D)
     d = D[0].shape[0]
     K = rand_kets(d, M)
     samples = 1 - np.sum(abs(np.einsum('id,jde,ie->ij', K.conj(), D, K))**4, axis=1)/d
@@ -87,12 +117,14 @@ def avg_magic_analytic(d, nqubits=False):
 ####################################################################################################
 
 def avg_magic_subspace_naive(D, B):
+    D = flatten_if_needed(D)
     d_b = D[0].shape[0]
     d_s = B.shape[0]
     B4 = tensor_power(B, 4)
     return 1 - d_b*(construct_Q(D) @ B4.conj().T @ haar_moment(d_s, 4) @ B4).trace().real
 
 def avg_magic_subspace_mc(D, O, M=750, projector=False):
+    D = flatten_if_needed(D)
     d_b = D[0].shape[0]
     if projector:
         L, V = np.linalg.eigh(O)
@@ -108,6 +140,7 @@ def avg_magic_subspace_mc(D, O, M=750, projector=False):
 ####################################################################################################
 
 def avg_magic_avg_subspace_mc(D_b, d_s, M=250, R=250):
+    D = flatten_if_needed(D)
     d_b = D_b[0].shape[0]
     means = []
     stds = []
@@ -123,23 +156,24 @@ def avg_magic_avg_subspace_mc(D_b, d_s, M=250, R=250):
 
 ####################################################################################################
 
-def extremize_subspace_magic_mc(D, d_small, dir, R=1, S=10, M=750):
-    d_big = D[0].shape[0]
+def extremize_subspace_magic_mc(D, d_s, dir, R=1, M=750, scale_sampling=True):
+    D = flatten_if_needed(D)
+    d_b = D[0].shape[0]
     s = 1 if dir == "min" else -1
-    Ks = [rand_kets(d_small, M) for _ in range(S)]
+    if scale_sampling:
+        M = M*d_s
+    K = rand_kets(d_s, M)
     
     @jax.jit
     def obj(V):
-        V = V.reshape(2, d_small, d_big)
-        C = V[0] + 1j*V[1]
-        C = jp.linalg.qr(C.conj().T)[0].conj().T
-        samples = []
-        for K in Ks:
-            L = K @ C
-            samples.append(jp.mean(1-jp.sum(abs(jp.einsum('id,jde,ie->ij', L.conj(), D, L))**4, axis=1)/d_big))
-        return s*jp.mean(jp.array(samples))**2
+        V = V.reshape(2, d_s, d_b)
+        B = V[0] + 1j*V[1]
+        B = jp.linalg.qr(B.conj().T)[0].conj().T
+        L = K @ B
+        ase = jp.mean(1-jp.sum(abs(jp.einsum('id,jde,ie->ij', L.conj(), D, L))**4, axis=1)/d_b)
+        return s*ase**2
 
-    results = [sc.optimize.minimize(obj, np.random.randn(2*d_big*d_small),\
+    results = [sc.optimize.minimize(obj, np.random.randn(2*d_b*d_s),\
                                          jac=jax.jit(jax.jacrev(obj)),\
                                          tol=1e-26, options={"disp": False, "maxiter": 10000})
                     for r in range(R)]
@@ -147,6 +181,6 @@ def extremize_subspace_magic_mc(D, d_small, dir, R=1, S=10, M=750):
         result = results[np.argmin([r.fun for r in results])]
     elif dir == "max":
         result = results[np.argmax([r.fun for r in results])]
-    V = result.x.reshape(2, d_small, d_big)
-    C =  V[0] + 1j*V[1]
-    return np.array(jp.linalg.qr(C.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
+    V = result.x.reshape(2, d_s, d_b)
+    B =  V[0] + 1j*V[1]
+    return np.array(jp.linalg.qr(B.conj().T)[0].conj().T), np.sqrt(abs(result.fun))

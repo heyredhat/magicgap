@@ -6,7 +6,7 @@ from jax import lax
 from functools import reduce, partial
 
 from .utils import kron
-from .stabilizer_entropy import sum_symp_indices, symplectic_product
+from .stabilizer_entropy import sum_symp_indices, symplectic_product, expand_chi
 
 @partial(jax.jit, static_argnums=(1, 2))
 def decode_multiqudit_index(i, d, n):
@@ -93,8 +93,7 @@ def multiqudit_term5(chi, d, n, d_bar):
     total_sum = lax.fori_loop(0, total, body, 0.0)
     return total_sum
 
-def avg_magic_subspace_multiqudit(D, O, local_d, projector=False, return_terms=False):
-    d = local_d
+def avg_magic_subspace_multiqudit(D, O, d, projector=False, return_terms=False):
     d_bar = d if d % 2 != 0 else 2 * d
     w = jp.exp(2 * jp.pi * 1j / d)
     tau = -jp.exp(1j * jp.pi / d)
@@ -109,11 +108,8 @@ def avg_magic_subspace_multiqudit(D, O, local_d, projector=False, return_terms=F
         d_s = O.shape[0]
         Pi = O.conj().T @ O
 
-    chi = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
-
-    starts = (0,) * chi.ndim
-    sizes = (d,) * chi.ndim
-    chi_trunc = lax.dynamic_slice(chi, starts, sizes)
+    chi_trunc = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
+    chi = expand_chi(chi_trunc)
 
     term1 = multiqudit_term1(chi_trunc, d_b)
     term2 = multiqudit_term2(chi, d_b, d, n)
@@ -128,12 +124,7 @@ def avg_magic_subspace_multiqudit(D, O, local_d, projector=False, return_terms=F
     norm = d_b / (d_s * (d_s + 1) * (d_s + 2) * (d_s + 3))
     return float(1 - norm * sum(terms).real)
 
-def avg_magic_subspace_multiqudit_term5(D, O, local_d, projector=False):
-    d = local_d
-    d_bar = d if d % 2 != 0 else 2 * d
-    w = jp.exp(2 * jp.pi * 1j / d)
-    tau = -jp.exp(1j * jp.pi / d)
-
+def avg_magic_subspace_multiqudit_term5(D, O, d, projector=False):
     n = (D.ndim - 2) // 2
     d_b = d ** n
 
@@ -144,22 +135,16 @@ def avg_magic_subspace_multiqudit_term5(D, O, local_d, projector=False):
         d_s = O.shape[0]
         Pi = O.conj().T @ O
 
-    chi = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
+    chi = expand_chi(jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b)
     return multiqudit_term5(chi, d, n, d_bar)
 
-
-def extremize_subspace_magic_multiqudit(D, local_d, d_s, dir, R=1):
+def extremize_subspace_magic_multiqudit(D, d, d_s, dir, R=1):
     s = 1 if dir == "min" else -1
-    d = local_d
     d_bar = d if d % 2 != 0 else 2 * d
     w = jp.exp(2 * jp.pi * 1j / d)
     tau = -jp.exp(1j * jp.pi / d)
-
     n = (D.ndim - 2) // 2
     d_b = d ** n
-
-    starts = (0,) * (D.ndim - 2)
-    sizes = (d,) * (D.ndim - 2)
 
     @jax.jit
     def obj(V):
@@ -167,8 +152,8 @@ def extremize_subspace_magic_multiqudit(D, local_d, d_s, dir, R=1):
         B = V[0] + 1j*V[1]
         B = jp.linalg.qr(B.conj().T)[0].conj().T
         Pi = B.conj().T @ B
-        chi = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
-        chi_trunc = lax.dynamic_slice(chi, starts, sizes)
+        chi_trunc = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
+        chi = expand_chi(chi_trunc)
 
         term1 = multiqudit_term1(chi_trunc, d_b)
         term2 = multiqudit_term2(chi, d_b, d, n)
