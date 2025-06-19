@@ -106,7 +106,7 @@ def avg_magic_subspace_multiqudit(D, O, d, projector=False, return_terms=False):
         Pi = O
     else:
         d_s = O.shape[0]
-        Pi = O.conj().T @ O
+        Pi = O.T @ O.conj()
 
     chi_trunc = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
     chi = expand_chi(chi_trunc)
@@ -133,7 +133,7 @@ def avg_magic_subspace_multiqudit_term5(D, O, d, projector=False):
         Pi = O
     else:
         d_s = O.shape[0]
-        Pi = O.conj().T @ O
+        Pi = O.T @ O.conj()
 
     chi = expand_chi(jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b)
     return multiqudit_term5(chi, d, n, d_bar)
@@ -150,8 +150,8 @@ def extremize_subspace_magic_multiqudit(D, d, d_s, dir, R=1):
     def obj(V):
         V = V.reshape(2, d_s, d_b)
         B = V[0] + 1j*V[1]
-        B = jp.linalg.qr(B.conj().T)[0].conj().T
-        Pi = B.conj().T @ B
+        B = jp.linalg.qr(B.T)[0].T
+        Pi = B.T @ B.conj()
         chi_trunc = jp.einsum("...jk,jk->...", D.conj(), Pi) / d_b
         chi = expand_chi(chi_trunc)
 
@@ -174,5 +174,5 @@ def extremize_subspace_magic_multiqudit(D, d, d_s, dir, R=1):
     elif dir == "max":
         result = results[np.argmax([r.fun for r in results])]
     V = result.x.reshape(2, d_s, d_b)
-    C =  V[0] + 1j*V[1]
-    return np.array(jp.linalg.qr(C.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
+    B =  V[0] + 1j*V[1]
+    return np.array(jp.linalg.qr(B.T)[0].T), np.sqrt(abs(result.fun))

@@ -28,14 +28,14 @@ def avg_clifford_entropy_mc(D, M=750):
 def avg_clifford_entropy_subspace_mc(D, B, M=750):
     D = flatten_if_needed(D)
     d_s, d_b = B.shape
-    Pi_C = np.eye(d_b) - B.conj().T @ B
-    samples = clifford_entropy_vec(D, B.conj().T @ rand_unitary(d_s, M) @ B + Pi_C)
+    Pi_C = np.eye(d_b) - B.T @ B.conj()
+    samples = clifford_entropy_vec(D, B.T @ rand_unitary(d_s, M) @ B.conj() + Pi_C)
     return np.mean(samples), np.std(samples)
 
 def lift_unitary(U, B):
     d_s, d_b = B.shape
-    Pi_C = np.eye(d_b) - B.conj().T @ B 
-    return B.conj().T @ U @ B + Pi_C 
+    Pi_C = np.eye(d_b) - B.T @ B.conj()
+    return B.T @ U @ B.conj() + Pi_C 
 
 def wh_entropy(D_b, D_s, B):
     D_b = flatten_if_needed(D_b)
@@ -56,8 +56,8 @@ def extremize_wh_entropy(D_b, D_s, dir, R=1):
     def obj(V):
         V = V.reshape(2, d_s, d_b)
         B = V[0] + 1j*V[1]
-        B = jp.linalg.qr(B.conj().T)[0].conj().T
-        D_s_lift = B.conj().T @ D_s @ B + jp.eye(d_b) - B.conj().T @ B
+        B = jp.linalg.qr(B.T)[0].T
+        D_s_lift = B.T @ D_s @ B.conj() + jp.eye(d_b) - B.T @ B.conj()
         whe = 1 - jp.sum(abs(jp.einsum("aij, bij", D_b.conj(), D_s_lift))**4)/d_b**6
         return s*whe**2
 
@@ -72,7 +72,7 @@ def extremize_wh_entropy(D_b, D_s, dir, R=1):
         result = results[np.argmax([r.fun for r in results])]
     V = result.x.reshape(2, d_s, d_b)
     B = V[0] + 1j*V[1]
-    return np.array(jp.linalg.qr(B.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
+    return np.array(jp.linalg.qr(B.T)[0].T), np.sqrt(abs(result.fun))
 
 def min_unitary_completion(D, B, R=10):
     D = flatten_if_needed(D)

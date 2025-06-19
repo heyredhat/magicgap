@@ -100,7 +100,7 @@ def avg_magic_subspace_qudit(D, O, projector=False, return_terms=False):
         Pi = O
         d_s = sum(np.isclose(np.linalg.eigvals(Pi), 1))
     else:
-        Pi = O.conj().T @ O
+        Pi = O.T @ O.conj()
         d_s = O.shape[0]
 
     chi_trunc = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), Pi) / d
@@ -129,8 +129,8 @@ def extremize_subspace_magic_qudit(D, d_s, dir, R=1):
     def obj(V):
         V = V.reshape(2, d_s, d)
         B = V[0] + 1j*V[1]
-        B = jp.linalg.qr(B.conj().T)[0].conj().T
-        Pi = B.conj().T @ B
+        B = jp.linalg.qr(B.T)[0].T
+        Pi = B.T @ B.conj()
         chi_trunc = jp.einsum("ijkl,lk->ij", jp.transpose(D, (0, 1, 3, 2)).conj(), B.conj().T @ B) / d
         chi = expand_chi(chi_trunc)
         chi_abs2 = jp.abs(chi_trunc) ** 2
@@ -152,5 +152,5 @@ def extremize_subspace_magic_qudit(D, d_s, dir, R=1):
     elif dir == "max":
         result = results[np.argmax([r.fun for r in results])]
     V = result.x.reshape(2, d_s, d)
-    C =  V[0] + 1j*V[1]
-    return np.array(jp.linalg.qr(C.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
+    B =  V[0] + 1j*V[1]
+    return np.array(jp.linalg.qr(B.T)[0].T), np.sqrt(abs(result.fun))

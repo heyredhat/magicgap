@@ -121,7 +121,7 @@ def avg_magic_subspace_naive(D, B):
     d_b = D[0].shape[0]
     d_s = B.shape[0]
     B4 = tensor_power(B, 4)
-    return 1 - d_b*(construct_Q(D) @ B4.conj().T @ haar_moment(d_s, 4) @ B4).trace().real
+    return 1 - d_b*(construct_Q(D) @ B4.T @ haar_moment(d_s, 4) @ B4.conj()).trace().real
 
 def avg_magic_subspace_mc(D, O, M=750, projector=False):
     D = flatten_if_needed(D)
@@ -139,23 +139,6 @@ def avg_magic_subspace_mc(D, O, M=750, projector=False):
 
 ####################################################################################################
 
-def avg_magic_avg_subspace_mc(D_b, d_s, M=250, R=250):
-    D = flatten_if_needed(D)
-    d_b = D_b[0].shape[0]
-    means = []
-    stds = []
-    for i in range(R):
-        mean, std = avg_magic_subspace_mc(D_b, rand_basis(d_s, d_b), M=M)
-        means.append(mean)
-        stds.append(std)
-    means, stds = np.array(means), np.array(stds)
-    weights = 1 / stds**2
-    weighted_mean = np.sum(weights * means) / np.sum(weights)
-    weighted_std = np.sqrt(1 / np.sum(weights))
-    return weighted_mean, weighted_std
-
-####################################################################################################
-
 def extremize_subspace_magic_mc(D, d_s, dir, R=1, M=750, scale_sampling=True):
     D = flatten_if_needed(D)
     d_b = D[0].shape[0]
@@ -168,7 +151,7 @@ def extremize_subspace_magic_mc(D, d_s, dir, R=1, M=750, scale_sampling=True):
     def obj(V):
         V = V.reshape(2, d_s, d_b)
         B = V[0] + 1j*V[1]
-        B = jp.linalg.qr(B.conj().T)[0].conj().T
+        B = jp.linalg.qr(B.T)[0].T
         L = K @ B
         ase = jp.mean(1-jp.sum(abs(jp.einsum('id,jde,ie->ij', L.conj(), D, L))**4, axis=1)/d_b)
         return s*ase**2
@@ -183,4 +166,4 @@ def extremize_subspace_magic_mc(D, d_s, dir, R=1, M=750, scale_sampling=True):
         result = results[np.argmax([r.fun for r in results])]
     V = result.x.reshape(2, d_s, d_b)
     B =  V[0] + 1j*V[1]
-    return np.array(jp.linalg.qr(B.conj().T)[0].conj().T), np.sqrt(abs(result.fun))
+    return np.array(jp.linalg.qr(B.T)[0].T), np.sqrt(abs(result.fun))
