@@ -86,7 +86,7 @@ def renyi_stabilizer_entropy(D, ket, alpha):
     D = flatten_if_needed(D)
     d = ket.shape[0]
     chi = np.array([abs(ket.conj() @ O @ ket)**2 for O in D])/d
-    return (1/(1-alpha))*np.log2(np.sum(chi**(2*alpha))) - np.log2(d)
+    return (1/(1-alpha))*np.log2(np.sum(chi**(alpha))) - np.log2(d)
 
 def max_renyi_stabilizer_entropy(d, alpha=2):
     return (1/(1-alpha))*np.log2((1+(d-1)*(d+1)**(1-alpha))/d)
