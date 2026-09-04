@@ -222,7 +222,7 @@ def main(kmax=30):
 
     # panel (b): the two gaps
     ax2.axhline(0, ls='--', color='k', lw=1.0)
-    ax2.plot(k, M2q-Mqq, 'o-', color=C0, ms=4, lw=1.3, label=r'$M_{2\mathrm{q}}-M_{\mathrm{qq}}$')
+    ax2.plot(k, M2q-Mqq, 'o-', color=C0, ms=4, lw=1.3, label=r'$M_{4\mathrm{q}}-M_{\mathrm{qq}}$')
     ax2.plot(k, M4q-M2q, '^-', color=C1, ms=4, lw=1.3, label=r'$M_{4\mathrm{q}}-M_{2\mathrm{q}}\equiv 0$')
     ax2.axhline(-2/35, ls=':', color=C0, lw=0.9)
     ax2.text(kmax, -2/35+0.004, r'$-\frac{2}{35}$', color=C0, ha='right', va='bottom', fontsize=10)
